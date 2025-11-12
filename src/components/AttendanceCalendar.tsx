@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Copy, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DayAttendance {
@@ -8,8 +8,6 @@ interface DayAttendance {
   percentage: number;
   sessionId: string;
   sessionName: string;
-  batchName: string;
-  publicId: string;
 }
 
 interface AttendanceCalendarProps {
@@ -37,7 +35,7 @@ export function AttendanceCalendar({ onDateSelect, selectedDate }: AttendanceCal
 
       const { data: sessions, error: sessionsError } = await supabase
         .from('attendance_sessions')
-        .select('id, session_date, session_name, batch_name, public_id')
+        .select('id, session_date, session_name')
         .gte('session_date', startDate)
         .lte('session_date', endDate);
 
@@ -59,9 +57,7 @@ export function AttendanceCalendar({ onDateSelect, selectedDate }: AttendanceCal
           count,
           percentage: count > 0 ? 100 : 0,
           sessionId: session.id,
-          sessionName: session.session_name,
-          batchName: session.batch_name || 'Default Batch',
-          publicId: session.public_id
+          sessionName: session.session_name
         };
       }
 
@@ -176,50 +172,18 @@ export function AttendanceCalendar({ onDateSelect, selectedDate }: AttendanceCal
                     : 'border-gray-200 hover:border-gray-300'
                 } ${attendance ? 'cursor-pointer' : 'cursor-default opacity-40'}`}
               >
-                <div className="flex flex-col items-center justify-center h-full p-1 relative group">
-                  <span className={`text-xs font-medium ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>
+                <div className="flex flex-col items-center justify-center h-full p-1">
+                  <span className={`text-sm font-medium ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>
                     {day}
                   </span>
                   {attendance && (
                     <>
-                      <span className="text-2xl font-bold text-gray-900 mt-0.5">{attendance.count}</span>
-                      <span className="text-xs text-gray-500 truncate w-full text-center px-0.5" title={attendance.batchName}>
-                        {attendance.batchName}
-                      </span>
+                      <span className="text-xs text-gray-600 mt-0.5">{attendance.count}</span>
                       <div
                         className={`absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full ${getAttendanceColor(
                           attendance.percentage
                         )}`}
                       />
-                      {attendance.publicId && (
-                        <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-10 transition-all rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
-                          <div className="flex gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const url = `${window.location.origin}/attendance/view/${attendance.publicId}`;
-                                navigator.clipboard.writeText(url);
-                                alert('Public URL copied!');
-                              }}
-                              className="p-1 bg-white rounded shadow-sm hover:bg-gray-100"
-                              title="Copy public URL"
-                            >
-                              <Copy className="w-3 h-3 text-blue-600" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const url = `${window.location.origin}/attendance/view/${attendance.publicId}`;
-                                window.open(url, '_blank');
-                              }}
-                              className="p-1 bg-white rounded shadow-sm hover:bg-gray-100"
-                              title="Open public view"
-                            >
-                              <ExternalLink className="w-3 h-3 text-blue-600" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -230,23 +194,18 @@ export function AttendanceCalendar({ onDateSelect, selectedDate }: AttendanceCal
       )}
 
       <div className="mt-4 pt-4 border-t border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-gray-600">High (≥70%)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <span className="text-gray-600">Medium (50-69%)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span className="text-gray-600">Low (&lt;50%)</span>
-            </div>
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+            <span className="text-gray-600">High (≥70%)</span>
           </div>
-          <div className="text-xs text-gray-500">
-            Numbers show present count • Hover to share URL
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+            <span className="text-gray-600">Medium (50-69%)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+            <span className="text-gray-600">Low (&lt;50%)</span>
           </div>
         </div>
       </div>

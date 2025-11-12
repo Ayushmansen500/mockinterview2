@@ -45,6 +45,8 @@ export function PublicAttendancePage() {
         setMessage({ type: 'error', text: 'Attendance session not found' });
       } else if (!data.is_active) {
         setMessage({ type: 'error', text: 'This attendance session is no longer active' });
+      } else if (new Date(data.expires_at) < new Date()) {
+        setMessage({ type: 'error', text: 'This attendance session has expired' });
       } else {
         setSession(data);
       }

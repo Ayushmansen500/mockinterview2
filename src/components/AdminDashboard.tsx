@@ -1,40 +1,36 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { Plus, Copy, ExternalLink, Trophy, Save, X, TrendingUp, Users, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { AnalyticsDashboard } from './AnalyticsDashboard';
-import { LeaderboardTable } from './LeaderboardTable';
-import { StudentRoundsModal } from './StudentRoundsModal';
-import { InterviewRoundForm } from './InterviewRoundForm';
-import { LeaderboardSelector } from './LeaderboardSelector';
-import { LogOut, Plus, Download, Upload, Share2, Moon, Sun } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
-import { calculateBatchMetrics, getStudentMetricsArray } from '../lib/scoring';
-import type { Database } from '../lib/database.types';
-import type { StudentMetrics, BatchMetrics } from '../lib/scoring';
+import { useAuth } from '../contexts/AuthContext';
 
-type Leaderboard = Database['public']['Tables']['leaderboards']['Row'];
-type InterviewRound = Database['public']['Tables']['interview_rounds']['Row'];
-
-interface AdminDashboardProps {
-  hideHeader?: boolean;
+interface Leaderboard {
+  id: string;
+  name: string;
+  description: string;
+  public_id: string;
+  created_at: string;
 }
 
-export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
-  const { admin, signOut } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+interface InterviewRound {
+  id: string;
+  student_name: string;
+  score: number;
+  interview_date: string;
+  interviewer_name: string;
+  feedback: string;
+  round_number: number;
+}
+
+export function AdminDashboard({ hideHeader }: { hideHeader?: boolean }) {
+  const { admin } = useAuth();
   const [leaderboards, setLeaderboards] = useState<Leaderboard[]>([]);
-  const [selectedLeaderboard, setSelectedLeaderboard] = useState<Leaderboard | null>(null);
+  const [selectedLeaderboard, setSelectedLeaderboard] = useState<string | null>(null);
   const [rounds, setRounds] = useState<InterviewRound[]>([]);
-  const [studentMetrics, setStudentMetrics] = useState<StudentMetrics[]>([]);
-  const [batchMetrics, setBatchMetrics] = useState<BatchMetrics>({
-    totalStudents: 0,
-    totalInterviews: 0,
-    averageScore: 0,
-    highestIndividualScore: 0,
-  });
-  const [selectedStudent, setSelectedStudent] = useState<StudentMetrics | null>(null);
-  const [showRoundForm, setShowRoundForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newLeaderboardName, setNewLeaderboardName] = useState('');
+  const [newLeaderboardDesc, setNewLeaderboardDesc] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   useEffect(() => {
     loadLeaderboards();
@@ -42,312 +38,359 @@ export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
 
   useEffect(() => {
     if (selectedLeaderboard) {
-      loadRounds(selectedLeaderboard.id);
+      loadRounds();
     }
   }, [selectedLeaderboard]);
 
-  useEffect(() => {
-    if (rounds.length > 0) {
-      const metrics = getStudentMetricsArray(rounds);
-      setStudentMetrics(metrics);
-      setBatchMetrics(calculateBatchMetrics(rounds));
-    } else {
-      setStudentMetrics([]);
-      setBatchMetrics({
-        totalStudents: 0,
-        totalInterviews: 0,
-        averageScore: 0,
-        highestIndividualScore: 0,
-      });
-    }
-  }, [rounds]);
-
   const loadLeaderboards = async () => {
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('leaderboards')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    const { data } = await supabase
-      .from('leaderboards')
-      .select('*')
-      .order('created_at', { ascending: false });
+      if (error) throw error;
+      setLeaderboards(data || []);
 
-    if (data) {
-      setLeaderboards(data);
-      if (data.length > 0 && !selectedLeaderboard) {
-        setSelectedLeaderboard(data[0]);
+      if (data && data.length > 0 && !selectedLeaderboard) {
+        setSelectedLeaderboard(data[0].id);
       }
+    } catch (error) {
+      console.error('Error loading leaderboards:', error);
+      setMessage({ type: 'error', text: 'Failed to load leaderboards' });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadRounds = async (leaderboardId: string) => {
-    const { data } = await supabase
-      .from('interview_rounds')
-      .select('*')
-      .eq('leaderboard_id', leaderboardId)
-      .order('interview_date', { ascending: false });
-
-    if (data) {
-      setRounds(data);
-    }
-  };
-
-  const handleCreateLeaderboard = async (name: string, description: string) => {
-    if (!admin) return;
-
-    const { data } = await supabase
-      .from('leaderboards')
-      .insert({
-        name,
-        description,
-        created_by: admin.id,
-      })
-      .select()
-      .single();
-
-    if (data) {
-      setLeaderboards([data, ...leaderboards]);
-      setSelectedLeaderboard(data);
-    }
-  };
-
-  const handleDeleteLeaderboard = async (id: string) => {
-    if (!confirm('Delete this leaderboard? All interview data will be removed.')) return;
-
-    await supabase.from('leaderboards').delete().eq('id', id);
-    const newLeaderboards = leaderboards.filter(l => l.id !== id);
-    setLeaderboards(newLeaderboards);
-    setSelectedLeaderboard(newLeaderboards[0] || null);
-  };
-
-  const handleSaveRound = async (roundData: Omit<InterviewRound, 'id' | 'leaderboard_id' | 'created_at' | 'updated_at'>) => {
+  const loadRounds = async () => {
     if (!selectedLeaderboard) return;
 
-    const { data } = await supabase
-      .from('interview_rounds')
-      .insert({
-        ...roundData,
-        leaderboard_id: selectedLeaderboard.id,
-      })
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('interview_rounds')
+        .select('*')
+        .eq('leaderboard_id', selectedLeaderboard)
+        .order('score', { ascending: false });
 
-    if (data) {
-      setRounds([...rounds, data]);
-      setShowRoundForm(false);
+      if (error) throw error;
+      setRounds(data || []);
+    } catch (error) {
+      console.error('Error loading rounds:', error);
     }
   };
 
-  const handleDeleteRound = async (roundId: string) => {
-    await supabase.from('interview_rounds').delete().eq('id', roundId);
-    setRounds(rounds.filter(r => r.id !== roundId));
+  const createLeaderboard = async () => {
+    if (!newLeaderboardName.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a leaderboard name' });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('leaderboards')
+        .insert({
+          name: newLeaderboardName.trim(),
+          description: newLeaderboardDesc.trim(),
+          created_by: admin?.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setMessage({ type: 'success', text: 'Leaderboard created successfully!' });
+      setShowNewForm(false);
+      setNewLeaderboardName('');
+      setNewLeaderboardDesc('');
+      await loadLeaderboards();
+      setSelectedLeaderboard(data.id);
+    } catch (error) {
+      console.error('Error creating leaderboard:', error);
+      setMessage({ type: 'error', text: 'Failed to create leaderboard' });
+    }
   };
 
-  const handleExport = () => {
-    if (!selectedLeaderboard) return;
-
-    const dataStr = JSON.stringify({
-      leaderboard: selectedLeaderboard,
-      rounds: rounds,
-    }, null, 2);
-
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const fileName = `${selectedLeaderboard.name.replace(/\s+/g, '_')}_rounds.json`;
-
-    const link = document.createElement('a');
-    link.setAttribute('href', dataUri);
-    link.setAttribute('download', fileName);
-    link.click();
-  };
-
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !selectedLeaderboard) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const json = JSON.parse(e.target?.result as string);
-
-        if (json.rounds && Array.isArray(json.rounds)) {
-          for (const round of json.rounds) {
-            await supabase.from('interview_rounds').insert({
-              leaderboard_id: selectedLeaderboard.id,
-              student_name: round.student_name,
-              round_number: round.round_number || 1,
-              score: round.score || 5,
-              interview_date: round.interview_date,
-              interviewer_name: round.interviewer_name || '',
-              strengths: round.strengths || '',
-              weaknesses: round.weaknesses || '',
-              feedback: round.feedback || '',
-              notes: round.notes || '',
-            });
-          }
-
-          loadRounds(selectedLeaderboard.id);
-          alert('Import successful!');
-        }
-      } catch (error) {
-        alert('Failed to import file. Please check the format.');
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  };
-
-  const copyPublicLink = () => {
-    if (!selectedLeaderboard) return;
-    const url = `${window.location.origin}/public/${selectedLeaderboard.public_id}`;
+  const copyPublicUrl = (publicId: string) => {
+    const url = `${window.location.origin}/leaderboard/${publicId}`;
     navigator.clipboard.writeText(url);
-    alert('Public link copied!');
+    setMessage({ type: 'success', text: 'Public URL copied to clipboard!' });
   };
+
+  const openPublicUrl = (publicId: string) => {
+    const url = `${window.location.origin}/leaderboard/${publicId}`;
+    window.open(url, '_blank');
+  };
+
+  const calculateStats = () => {
+    if (rounds.length === 0) return { avg: 0, highest: 0, total: 0 };
+
+    const scores = rounds.map(r => r.score);
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const highest = Math.max(...scores);
+
+    return { avg, highest, total: rounds.length };
+  };
+
+  const stats = calculateStats();
+  const currentLeaderboard = leaderboards.find(l => l.id === selectedLeaderboard);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-slate-600 dark:text-slate-400">Loading...</div>
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
-  const selectedStudentRounds = selectedStudent
-    ? rounds.filter(r => r.student_name === selectedStudent.name)
-    : [];
-
-  const content = (
-    <div>
+  return (
+    <div className="space-y-6">
       {!hideHeader && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
-            Interview Leaderboard
-          </h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Manage student interview rounds and scores
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Interview Leaderboard</h2>
+            <p className="text-sm text-gray-600 mt-1">Track and manage interview performance</p>
+          </div>
+          <button
+            onClick={() => setShowNewForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Leaderboard
+          </button>
         </div>
       )}
-        <div className="mb-6">
-          <LeaderboardSelector
-            leaderboards={leaderboards}
-            selectedLeaderboard={selectedLeaderboard}
-            onSelect={setSelectedLeaderboard}
-            onCreate={handleCreateLeaderboard}
-            onDelete={handleDeleteLeaderboard}
-          />
+
+      {message && (
+        <div className={`p-4 rounded-lg ${
+          message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+        }`}>
+          {message.text}
         </div>
+      )}
 
-        {selectedLeaderboard && (
-          <>
-            <div className="mb-6 flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowRoundForm(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                Record Interview
-              </button>
-              <button
-                onClick={copyPublicLink}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-              >
-                <Share2 className="w-5 h-5" />
-                Copy Public Link
-              </button>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
-              >
-                <Download className="w-5 h-5" />
-                Export
-              </button>
-              <label className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors cursor-pointer">
-                <Upload className="w-5 h-5" />
-                Import
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImport}
-                  className="hidden"
-                />
+      {showNewForm && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Leaderboard</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Leaderboard Name
               </label>
-            </div>
-
-            <AnalyticsDashboard metrics={batchMetrics} />
-
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-                Student Leaderboard
-              </h2>
-              <LeaderboardTable
-                students={studentMetrics}
-                onStudentClick={setSelectedStudent}
+              <input
+                type="text"
+                value={newLeaderboardName}
+                onChange={(e) => setNewLeaderboardName(e.target.value)}
+                placeholder="e.g., Q1 2025 Interviews"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             </div>
-          </>
-        )}
-
-        {showRoundForm && selectedLeaderboard && (
-          <InterviewRoundForm
-            leaderboardId={selectedLeaderboard.id}
-            onSave={handleSaveRound}
-            onClose={() => setShowRoundForm(false)}
-          />
-        )}
-
-        {selectedStudent && (
-          <StudentRoundsModal
-            student={selectedStudent}
-            rounds={selectedStudentRounds}
-            onClose={() => setSelectedStudent(null)}
-            onDeleteRound={handleDeleteRound}
-          />
-        )}
-      </div>
-  );
-
-  if (hideHeader) {
-    return content;
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Interview Leaderboard
-              </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Welcome, {admin?.name}
-              </p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description (Optional)
+              </label>
+              <textarea
+                value={newLeaderboardDesc}
+                onChange={(e) => setNewLeaderboardDesc(e.target.value)}
+                placeholder="Add description..."
+                rows={3}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2">
               <button
-                onClick={toggleTheme}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                title={isDark ? 'Light mode' : 'Dark mode'}
+                onClick={createLeaderboard}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                {isDark ? (
-                  <Sun className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                ) : (
-                  <Moon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                )}
+                <Save className="w-4 h-4" />
+                Create
               </button>
               <button
-                onClick={() => signOut()}
-                className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                onClick={() => {
+                  setShowNewForm(false);
+                  setNewLeaderboardName('');
+                  setNewLeaderboardDesc('');
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
-                <LogOut className="w-5 h-5" />
-                Sign Out
+                <X className="w-4 h-4" />
+                Cancel
               </button>
             </div>
           </div>
         </div>
-      </header>
+      )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {content}
-      </main>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-1 space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Leaderboards</h3>
+          {leaderboards.length === 0 ? (
+            <p className="text-sm text-gray-500">No leaderboards yet</p>
+          ) : (
+            leaderboards.map((board) => (
+              <button
+                key={board.id}
+                onClick={() => setSelectedLeaderboard(board.id)}
+                className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
+                  selectedLeaderboard === board.id
+                    ? 'border-blue-500 bg-blue-50 text-blue-900'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                }`}
+              >
+                <div className="font-medium text-sm">{board.name}</div>
+                {board.description && (
+                  <div className="text-xs text-gray-500 mt-1 line-clamp-2">{board.description}</div>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="lg:col-span-3 space-y-6">
+          {currentLeaderboard ? (
+            <>
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">{currentLeaderboard.name}</h3>
+                    {currentLeaderboard.description && (
+                      <p className="text-sm text-gray-600 mt-1">{currentLeaderboard.description}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => copyPublicUrl(currentLeaderboard.public_id)}
+                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                      title="Copy public URL"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => openPublicUrl(currentLeaderboard.public_id)}
+                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                      title="Open public view"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-blue-600 font-medium">Total Candidates</p>
+                        <p className="text-2xl font-bold text-blue-900 mt-1">{stats.total}</p>
+                      </div>
+                      <Users className="w-8 h-8 text-blue-600 opacity-50" />
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-green-600 font-medium">Average Score</p>
+                        <p className="text-2xl font-bold text-green-900 mt-1">{stats.avg.toFixed(1)}</p>
+                      </div>
+                      <TrendingUp className="w-8 h-8 text-green-600 opacity-50" />
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-yellow-600 font-medium">Highest Score</p>
+                        <p className="text-2xl font-bold text-yellow-900 mt-1">{stats.highest}</p>
+                      </div>
+                      <Trophy className="w-8 h-8 text-yellow-600 opacity-50" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h4 className="font-semibold text-gray-900">Rankings</h4>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Candidate</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Round</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Interviewer</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {rounds.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                            <Trophy className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                            <p>No interview records yet</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        rounds.map((round, index) => (
+                          <tr key={round.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                {index < 3 && (
+                                  <Star className={`w-4 h-4 ${
+                                    index === 0 ? 'text-yellow-500' :
+                                    index === 1 ? 'text-gray-400' :
+                                    'text-orange-600'
+                                  } fill-current`} />
+                                )}
+                                <span className="text-sm font-medium text-gray-900">#{index + 1}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                  <span className="text-sm font-medium text-blue-700">
+                                    {round.student_name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="text-sm font-medium text-gray-900">{round.student_name}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                round.score >= 80 ? 'bg-green-100 text-green-800' :
+                                round.score >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {round.score}/100
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              Round {round.round_number}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {round.interviewer_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {new Date(round.interview_date).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+              <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+              <p className="text-gray-500">Select a leaderboard to view rankings</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
