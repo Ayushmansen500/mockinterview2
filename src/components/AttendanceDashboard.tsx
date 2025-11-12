@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, UserCheck, TrendingUp, Download, RefreshCw, Filter } from 'lucide-react';
+import { Users, UserCheck, TrendingUp, Download, RefreshCw, Filter, Copy, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { AttendanceCalendar } from './AttendanceCalendar';
 
@@ -8,6 +8,7 @@ interface AttendanceSession {
   session_date: string;
   session_code: string;
   session_name: string;
+  public_id: string;
   is_active: boolean;
 }
 
@@ -158,9 +159,22 @@ export function AttendanceDashboard() {
     });
   };
 
+  const copyPublicUrl = (publicId: string) => {
+    const url = `${window.location.origin}/attendance/view/${publicId}`;
+    navigator.clipboard.writeText(url);
+    alert('Public attendance URL copied to clipboard!');
+  };
+
+  const openPublicUrl = (publicId: string) => {
+    const url = `${window.location.origin}/attendance/view/${publicId}`;
+    window.open(url, '_blank');
+  };
+
   const filteredRecords = stats?.records.filter(record =>
     record.student_name.toLowerCase().includes(searchFilter.toLowerCase())
   ) || [];
+
+  const currentSession = sessions.find(s => s.session_date === selectedDate);
 
   if (loading) {
     return (
@@ -179,6 +193,26 @@ export function AttendanceDashboard() {
             <p className="text-sm text-gray-600 mt-1">View and manage attendance records</p>
           </div>
           <div className="flex gap-3">
+            {currentSession && currentSession.public_id && (
+              <>
+                <button
+                  onClick={() => copyPublicUrl(currentSession.public_id)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Copy public URL"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Public URL
+                </button>
+                <button
+                  onClick={() => openPublicUrl(currentSession.public_id)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  title="Open public view"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Public
+                </button>
+              </>
+            )}
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
