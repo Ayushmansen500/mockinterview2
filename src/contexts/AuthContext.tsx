@@ -1,17 +1,19 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 interface Admin {
   id: string;
   email: string;
   name: string;
+  created_at: string;
 }
 
 interface AuthContextType {
   user: User | null;
   admin: Admin | null;
   loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -25,51 +27,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setLoading(false);
+
       if (session?.user) {
-        loadAdmin(session.user.id);
-      } else {
-        setLoading(false);
+        loadAdminProfile(session.user.id);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+
       if (session?.user) {
-        loadAdmin(session.user.id);
+        loadAdminProfile(session.user.id);
       } else {
         setAdmin(null);
-        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadAdmin = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+  const loadAdminProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error) throw error;
+    if (data) {
       setAdmin(data);
-    } catch (error) {
-      console.error('Error loading admin:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setAdmin(null);
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (
-    <AuthContext.Provider value={{ user, admin, loading, signOut }}>
+    <AuthContext.Provider value={{ user, admin, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
