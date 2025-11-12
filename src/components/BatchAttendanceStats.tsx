@@ -31,7 +31,7 @@ interface BatchPublicUrl {
   id: string;
   public_id: string;
   is_active: boolean;
-  expires_at: string | null;
+  expires_at: string;
   created_at: string;
 }
 
@@ -127,14 +127,9 @@ export function BatchAttendanceStats() {
     setMessage(null);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setMessage({ type: 'error', text: 'User not authenticated' });
-        return;
-      }
-
       const publicId = `batch-${selectedBatchId.substring(0, 8)}-${Date.now()}`;
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
 
       const { error } = await supabase
         .from('batch_public_urls')
@@ -142,20 +137,16 @@ export function BatchAttendanceStats() {
           batch_id: selectedBatchId,
           public_id: publicId,
           is_active: true,
-          expires_at: null,
-          created_by: user.id
+          expires_at: expiresAt.toISOString()
         });
 
-      if (error) {
-        console.error('Insert error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       setMessage({ type: 'success', text: 'Public URL generated successfully!' });
       await loadPublicUrls();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error generating public URL:', error);
-      setMessage({ type: 'error', text: `Failed to generate public URL: ${error.message || 'Unknown error'}` });
+      setMessage({ type: 'error', text: 'Failed to generate public URL' });
     } finally {
       setGenerating(false);
     }
@@ -246,8 +237,7 @@ export function BatchAttendanceStats() {
     });
   };
 
-  const formatDateTime = (dateStr: string | null) => {
-    if (!dateStr) return 'Never';
+  const formatDateTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -256,8 +246,7 @@ export function BatchAttendanceStats() {
     });
   };
 
-  const isExpired = (expiresAt: string | null) => {
-    if (!expiresAt) return false;
+  const isExpired = (expiresAt: string) => {
     return new Date(expiresAt) < new Date();
   };
 
@@ -391,14 +380,14 @@ export function BatchAttendanceStats() {
               <div className="flex-1">
                 <h4 className="font-medium text-blue-900 mb-1">Public Shareable URL</h4>
                 <p className="text-sm text-blue-700 mb-3">
-                  Generate a permanent public URL to share batch attendance statistics. URL remains active until manually revoked.
+                  Generate a public URL to share batch attendance statistics. URL expires in 24 hours.
                 </p>
                 {activeUrl ? (
                   <div className="bg-white border border-blue-200 rounded p-3 mb-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-500">Active URL (Permanent):</span>
+                      <span className="text-xs text-gray-500">Active URL:</span>
                       <span className="text-xs text-gray-600">
-                        Created: {formatDateTime(activeUrl.created_at)}
+                        Expires: {formatDateTime(activeUrl.expires_at)}
                       </span>
                     </div>
                     <code className="text-sm text-blue-600 break-all block mb-2">
