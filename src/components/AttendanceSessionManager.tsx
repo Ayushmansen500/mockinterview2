@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Copy, Plus, RefreshCw, ExternalLink, CheckCircle, XCircle, Clock, Edit2, Check, X } from 'lucide-react';
+import { Calendar, Copy, Plus, RefreshCw, ExternalLink, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,7 +7,6 @@ interface AttendanceSession {
   id: string;
   session_date: string;
   session_code: string;
-  session_name: string;
   is_active: boolean;
   expires_at: string;
   created_at: string;
@@ -18,8 +17,6 @@ export function AttendanceSessionManager() {
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   useEffect(() => {
@@ -53,18 +50,11 @@ export function AttendanceSessionManager() {
       const expiresAt = new Date();
       expiresAt.setHours(23, 59, 59, 999);
 
-      const sessionName = `Attendance - ${new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      })}`;
-
       const { error } = await supabase
         .from('attendance_sessions')
         .insert({
           session_date: today,
           session_code: sessionCode,
-          session_name: sessionName,
           is_active: true,
           expires_at: expiresAt.toISOString(),
           created_by: user?.id
@@ -85,40 +75,6 @@ export function AttendanceSessionManager() {
       setMessage({ type: 'error', text: 'Failed to create attendance session' });
     } finally {
       setCreating(false);
-    }
-  };
-
-  const startEdit = (session: AttendanceSession) => {
-    setEditingId(session.id);
-    setEditName(session.session_name);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditName('');
-  };
-
-  const saveEdit = async (sessionId: string) => {
-    if (!editName.trim()) {
-      setMessage({ type: 'error', text: 'Session name cannot be empty' });
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('attendance_sessions')
-        .update({ session_name: editName.trim() })
-        .eq('id', sessionId);
-
-      if (error) throw error;
-
-      setMessage({ type: 'success', text: '✅ Session name updated successfully!' });
-      setEditingId(null);
-      setEditName('');
-      await loadSessions();
-    } catch (error) {
-      console.error('Error updating session name:', error);
-      setMessage({ type: 'error', text: 'Failed to update session name' });
     }
   };
 
@@ -214,41 +170,8 @@ export function AttendanceSessionManager() {
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  {editingId === todaySession.id ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => saveEdit(todaySession.id)}
-                        className="p-1 text-green-600 hover:bg-green-100 rounded"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="p-1 text-red-600 hover:bg-red-100 rounded"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <Calendar className="w-5 h-5 text-blue-600" />
-                      <span className="font-medium text-gray-900">{todaySession.session_name}</span>
-                      <button
-                        onClick={() => startEdit(todaySession)}
-                        className="p-1 text-gray-600 hover:bg-blue-100 rounded"
-                        title="Edit session name"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  <span className="font-medium text-gray-900">{formatDate(todaySession.session_date)}</span>
                   {todaySession.is_active && !isExpired(todaySession.expires_at) ? (
                     <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" />
@@ -261,12 +184,11 @@ export function AttendanceSessionManager() {
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-gray-600 mb-1">
-                  {formatDate(todaySession.session_date)}
-                </div>
-                <div className="text-sm text-gray-600 mb-3 flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  Expires: {formatTime(todaySession.expires_at)}
+                <div className="text-sm text-gray-600 mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Expires: {formatTime(todaySession.expires_at)}
+                  </div>
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-3 mb-3">
                   <p className="text-xs text-gray-500 mb-1">Attendance URL:</p>
@@ -318,40 +240,7 @@ export function AttendanceSessionManager() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                      {editingId === session.id ? (
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="flex-1 px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => saveEdit(session.id)}
-                            className="p-1 text-green-600 hover:bg-green-100 rounded"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="p-1 text-red-600 hover:bg-red-100 rounded"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <span className="font-medium text-gray-900">{session.session_name}</span>
-                          <button
-                            onClick={() => startEdit(session)}
-                            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                            title="Edit session name"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
+                      <span className="font-medium text-gray-900">{formatDate(session.session_date)}</span>
                       {session.is_active && !isExpired(session.expires_at) ? (
                         <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full">
                           Active
@@ -363,7 +252,7 @@ export function AttendanceSessionManager() {
                       )}
                     </div>
                     <div className="text-sm text-gray-600">
-                      {formatDate(session.session_date)} • Code: <code className="text-xs bg-gray-100 px-2 py-0.5 rounded">{session.session_code}</code>
+                      Code: <code className="text-xs bg-gray-100 px-2 py-0.5 rounded">{session.session_code}</code>
                     </div>
                   </div>
                   <div className="flex gap-2">

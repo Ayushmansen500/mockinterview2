@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, CheckCircle, XCircle, Clock, UserCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -85,7 +85,7 @@ export function PublicAttendancePage() {
         if (error.code === '23505') {
           setMessage({
             type: 'error',
-            text: '⚠️ You have already marked attendance for today. Duplicate submissions are not allowed.'
+            text: 'You have already marked your attendance for this session'
           });
           setAlreadyMarked(true);
         } else {
