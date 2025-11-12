@@ -84,7 +84,7 @@ export function PublicBatchStats() {
         return;
       }
 
-      if (new Date(urlData.expires_at) < new Date()) {
+      if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
         setError('This batch statistics link has expired');
         setLoading(false);
         return;
