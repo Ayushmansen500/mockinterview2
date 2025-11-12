@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Users, UserCheck, TrendingUp, Download, RefreshCw } from 'lucide-react';
+import { Users, UserCheck, TrendingUp, Download, RefreshCw, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { AttendanceCalendar } from './AttendanceCalendar';
 
 interface AttendanceSession {
   id: string;
   session_date: string;
   session_code: string;
+  session_name: string;
   is_active: boolean;
 }
 
@@ -18,6 +20,7 @@ interface AttendanceRecord {
 
 interface DailyStats {
   date: string;
+  sessionName: string;
   total_present: number;
   attendance_percentage: number;
   records: AttendanceRecord[];
@@ -29,6 +32,8 @@ export function AttendanceDashboard() {
   const [stats, setStats] = useState<DailyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   useEffect(() => {
     loadSessions();
@@ -39,6 +44,18 @@ export function AttendanceDashboard() {
       loadDailyStats();
     }
   }, [selectedDate]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (autoRefresh) {
+      interval = setInterval(() => {
+        loadDailyStats();
+      }, 30000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [autoRefresh, selectedDate]);
 
   const loadSessions = async () => {
     try {
@@ -75,7 +92,7 @@ export function AttendanceDashboard() {
         .from('attendance_records')
         .select('*')
         .eq('session_id', session.id)
-        .order('marked_at', { ascending: true });
+        .order('marked_at', { ascending: true});
 
       if (error) throw error;
 
@@ -84,6 +101,7 @@ export function AttendanceDashboard() {
 
       setStats({
         date: selectedDate,
+        sessionName: session.session_name,
         total_present: totalPresent,
         attendance_percentage: attendancePercentage,
         records: records || []
@@ -99,9 +117,10 @@ export function AttendanceDashboard() {
   const exportToCSV = () => {
     if (!stats || stats.records.length === 0) return;
 
-    const headers = ['Date', 'Name', 'Status', 'Time'];
+    const headers = ['Date', 'Session Name', 'Student Name', 'Status', 'Time'];
     const rows = stats.records.map(record => [
       selectedDate,
+      stats.sessionName,
       record.student_name,
       record.status,
       new Date(record.marked_at).toLocaleTimeString()
@@ -109,7 +128,7 @@ export function AttendanceDashboard() {
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.join(','))
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -139,6 +158,10 @@ export function AttendanceDashboard() {
     });
   };
 
+  const filteredRecords = stats?.records.filter(record =>
+    record.student_name.toLowerCase().includes(searchFilter.toLowerCase())
+  ) || [];
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -156,18 +179,15 @@ export function AttendanceDashboard() {
             <p className="text-sm text-gray-600 mt-1">View and manage attendance records</p>
           </div>
           <div className="flex gap-3">
-            <select
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Select Date</option>
-              {sessions.map((session) => (
-                <option key={session.id} value={session.session_date}>
-                  {formatDate(session.session_date)}
-                </option>
-              ))}
-            </select>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Auto-refresh (30s)
+            </label>
             <button
               onClick={loadDailyStats}
               disabled={refreshing}
@@ -197,7 +217,7 @@ export function AttendanceDashboard() {
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-green-600 font-medium">Attendance %</p>
+                    <p className="text-sm text-green-600 font-medium">Attendance Rate</p>
                     <p className="text-3xl font-bold text-green-900 mt-1">
                       {stats.attendance_percentage.toFixed(0)}%
                     </p>
@@ -211,18 +231,33 @@ export function AttendanceDashboard() {
               <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-purple-600 font-medium">Date</p>
-                    <p className="text-lg font-bold text-purple-900 mt-1">{formatDate(stats.date)}</p>
+                    <p className="text-sm text-purple-600 font-medium">Session</p>
+                    <p className="text-sm font-bold text-purple-900 mt-1 line-clamp-2">
+                      {stats.sessionName}
+                    </p>
+                    <p className="text-xs text-purple-700 mt-0.5">{formatDate(stats.date)}</p>
                   </div>
                   <div className="w-12 h-12 bg-purple-200 rounded-full flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-purple-700" />
+                    <Users className="w-6 h-6 text-purple-700" />
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-md font-semibold text-gray-900">Attendance Records</h4>
+              <div className="flex items-center gap-3">
+                <h4 className="text-md font-semibold text-gray-900">Attendance Records</h4>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <input
+                    type="text"
+                    value={searchFilter}
+                    onChange={(e) => setSearchFilter(e.target.value)}
+                    placeholder="Search by name..."
+                    className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
               {stats.records.length > 0 && (
                 <button
                   onClick={exportToCSV}
@@ -254,15 +289,15 @@ export function AttendanceDashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.records.length === 0 ? (
+                    {filteredRecords.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
                           <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                          <p>No attendance records for this date</p>
+                          <p>{searchFilter ? 'No records match your search' : 'No attendance records for this date'}</p>
                         </td>
                       </tr>
                     ) : (
-                      stats.records.map((record, index) => (
+                      filteredRecords.map((record, index) => (
                         <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {index + 1}
@@ -298,11 +333,16 @@ export function AttendanceDashboard() {
           </>
         ) : (
           <div className="text-center py-12 text-gray-500">
-            <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+            <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
             <p>Select a date to view attendance records</p>
           </div>
         )}
       </div>
+
+      <AttendanceCalendar
+        selectedDate={selectedDate}
+        onDateSelect={setSelectedDate}
+      />
     </div>
   );
 }
