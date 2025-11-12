@@ -8,6 +8,7 @@ interface AttendanceSession {
   session_date: string;
   session_code: string;
   session_name: string;
+  batch_name: string;
   is_active: boolean;
   expires_at: string;
   created_at: string;
@@ -18,6 +19,8 @@ export function AttendanceSessionManager() {
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [showBatchForm, setShowBatchForm] = useState(false);
+  const [batchName, setBatchName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -44,6 +47,11 @@ export function AttendanceSessionManager() {
   };
 
   const createTodaySession = async () => {
+    if (showBatchForm && !batchName.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a batch name' });
+      return;
+    }
+
     setCreating(true);
     setMessage(null);
 
@@ -65,6 +73,7 @@ export function AttendanceSessionManager() {
           session_date: today,
           session_code: sessionCode,
           session_name: sessionName,
+          batch_name: batchName.trim() || 'Default Batch',
           is_active: true,
           expires_at: expiresAt.toISOString(),
           created_by: user?.id
@@ -78,6 +87,8 @@ export function AttendanceSessionManager() {
         }
       } else {
         setMessage({ type: 'success', text: 'Attendance session created successfully!' });
+        setShowBatchForm(false);
+        setBatchName('');
         await loadSessions();
       }
     } catch (error) {
@@ -200,7 +211,7 @@ export function AttendanceSessionManager() {
             <p className="text-sm text-gray-600 mt-1">Create and manage daily attendance tracking</p>
           </div>
           <button
-            onClick={createTodaySession}
+            onClick={() => setShowBatchForm(!showBatchForm)}
             disabled={creating || !!todaySession}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
@@ -208,6 +219,45 @@ export function AttendanceSessionManager() {
             {todaySession ? 'Session Exists' : 'Create Today\'s Session'}
           </button>
         </div>
+
+        {showBatchForm && !todaySession && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Batch Information</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Batch Name
+                </label>
+                <input
+                  type="text"
+                  value={batchName}
+                  onChange={(e) => setBatchName(e.target.value)}
+                  placeholder="e.g., Batch A, Morning Batch, AWS Module 5"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">This helps organize attendance by class/batch</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={createTodaySession}
+                  disabled={creating}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                >
+                  {creating ? 'Creating...' : 'Create Session'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBatchForm(false);
+                    setBatchName('');
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {todaySession && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -263,6 +313,9 @@ export function AttendanceSessionManager() {
                 </div>
                 <div className="text-sm text-gray-600 mb-1">
                   {formatDate(todaySession.session_date)}
+                </div>
+                <div className="text-sm text-gray-600 mb-1">
+                  <span className="font-medium">Batch:</span> {todaySession.batch_name || 'Default Batch'}
                 </div>
                 <div className="text-sm text-gray-600 mb-3 flex items-center gap-2">
                   <Clock className="w-4 h-4" />
