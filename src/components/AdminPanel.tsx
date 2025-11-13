@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { LogOut, Trophy, Activity, Moon, Sun } from 'lucide-react';
+import { LogOut, Trophy, Activity, Moon, Sun, Calendar } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { ActivenessBoardSelector } from './ActivenessBoardSelector';
+import { AttendanceBatchSelector } from './AttendanceBatchSelector';
 
-type DashboardType = 'interviews' | 'activeness';
+type DashboardType = 'interviews' | 'activeness' | 'attendance';
 
 export function AdminPanel() {
   const { admin, signOut } = useAuth();
@@ -70,6 +71,17 @@ export function AdminPanel() {
               <Activity className="w-5 h-5" />
               Zoom Activeness Board
             </button>
+            <button
+              onClick={() => setActiveTab('attendance')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+                activeTab === 'attendance'
+                  ? 'bg-orange-600 text-white shadow-lg'
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+              }`}
+            >
+              <Calendar className="w-5 h-5" />
+              Attendance Tracker
+            </button>
           </div>
         </div>
       </header>
@@ -77,8 +89,10 @@ export function AdminPanel() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'interviews' ? (
           <AdminDashboard hideHeader={true} />
-        ) : (
+        ) : activeTab === 'activeness' ? (
           <ActivenessBoardSelector />
+        ) : (
+          <AttendanceBatchSelector />
         )}
       </main>
     </div>
