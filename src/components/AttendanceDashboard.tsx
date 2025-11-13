@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Calendar, Users, CheckCircle, XCircle, Clock, Edit2, Save, X, Copy, ExternalLink } from 'lucide-react';
+import { Calendar, Users, CheckCircle, XCircle, Clock, Edit2, Save, X, Copy, ExternalLink, Share2 } from 'lucide-react';
 import { AttendanceCalendar } from './AttendanceCalendar';
 import { AttendanceAnalytics } from './AttendanceAnalytics';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AttendanceSession {
   id: string;
@@ -26,9 +27,11 @@ interface AttendanceRecord {
 interface AttendanceDashboardProps {
   batchId: string;
   batchName: string;
+  onBatchUpdate?: () => void;
 }
 
-export function AttendanceDashboard({ batchId, batchName }: AttendanceDashboardProps) {
+export function AttendanceDashboard({ batchId, batchName, onBatchUpdate }: AttendanceDashboardProps) {
+  const { user } = useAuth();
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<AttendanceSession | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -36,9 +39,12 @@ export function AttendanceDashboard({ batchId, batchName }: AttendanceDashboardP
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editedName, setEditedName] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [publicUrl, setPublicUrl] = useState<string>('');
+  const [loadingPublicUrl, setLoadingPublicUrl] = useState(true);
 
   useEffect(() => {
     loadSessions();
+    loadPublicUrl();
   }, [batchId]);
 
   useEffect(() => {
@@ -140,6 +146,63 @@ export function AttendanceDashboard({ batchId, batchName }: AttendanceDashboardP
     window.open(url, '_blank');
   };
 
+  const loadPublicUrl = async () => {
+    setLoadingPublicUrl(true);
+    const { data } = await supabase
+      .from('batch_public_urls')
+      .select('public_id')
+      .eq('batch_id', batchId)
+      .eq('url_type', 'permanent')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (data) {
+      setPublicUrl(`${window.location.origin}/attendance/${data.public_id}`);
+    }
+    setLoadingPublicUrl(false);
+  };
+
+  const generatePublicUrl = async () => {
+    const publicId = `batch-${batchName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from('batch_public_urls')
+      .insert({
+        batch_id: batchId,
+        public_id: publicId,
+        url_type: 'permanent',
+        is_active: true,
+        expires_at: null,
+        created_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      alert(`Failed to generate public URL: ${error.message}`);
+      return;
+    }
+
+    if (data) {
+      const url = `${window.location.origin}/attendance/${publicId}`;
+      setPublicUrl(url);
+      alert('Permanent public URL generated successfully!');
+    }
+  };
+
+  const copyBatchPublicUrl = () => {
+    if (publicUrl) {
+      navigator.clipboard.writeText(publicUrl);
+      alert('Batch dashboard URL copied to clipboard!');
+    }
+  };
+
+  const openBatchPublicUrl = () => {
+    if (publicUrl) {
+      window.open(publicUrl, '_blank');
+    }
+  };
+
   const handleDateSelect = (date: string) => {
     setSelectedDate(date);
     const session = sessions.find(s => s.session_date === date);
@@ -174,6 +237,56 @@ export function AttendanceDashboard({ batchId, batchName }: AttendanceDashboardP
           <Calendar className="w-5 h-5" />
           Create New Session
         </button>
+      </div>
+
+      <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-xl border border-orange-200 dark:border-orange-800 p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <Share2 className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Student Dashboard
+              </h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+              Share this permanent URL with students to view their attendance status, sessions attended, and missed sessions in real-time.
+            </p>
+            {loadingPublicUrl ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Loading...</p>
+            ) : publicUrl ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={publicUrl}
+                  readOnly
+                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-orange-200 dark:border-orange-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+                <button
+                  onClick={copyBatchPublicUrl}
+                  className="p-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                  title="Copy URL"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={openBatchPublicUrl}
+                  className="p-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                  title="Open URL"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={generatePublicUrl}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Generate Student Dashboard URL
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <AttendanceAnalytics

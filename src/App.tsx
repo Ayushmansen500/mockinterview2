@@ -8,6 +8,7 @@ import { AdminSetup } from './components/AdminSetup';
 import { PublicLeaderboard } from './components/PublicLeaderboard';
 import { PublicActivenessBoard } from './components/PublicActivenessBoard';
 import { PublicAttendance } from './components/PublicAttendance';
+import { PublicBatchAttendance } from './components/PublicBatchAttendance';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -35,6 +36,7 @@ function App() {
             <Route path="/public/:publicId" element={<PublicLeaderboard />} />
             <Route path="/activeness/:publicId" element={<PublicActivenessBoard />} />
             <Route path="/attend/:sessionCode" element={<PublicAttendance />} />
+            <Route path="/attendance/:publicId" element={<PublicBatchAttendance />} />
             <Route
               path="/"
               element={
