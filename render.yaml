@@ -1,10 +1,10 @@
 services:
-  - type: static_site
-    name: leaderboard-app
-    runtime: static
+  - type: web
+    name: mockinterview2
+    runtime: node
     branch: main
     buildCommand: npm run build
-    publishDirectory: dist
+    startCommand: npm start
     envVars:
       - key: VITE_SUPABASE_URL
         value: https://oxlrzqdtnabjewelgyjr.supabase.co
