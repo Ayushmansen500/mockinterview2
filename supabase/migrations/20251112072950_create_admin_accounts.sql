@@ -1,11 +1,32 @@
--- COMPLETE FIX: Create admin accounts with ALL required fields
--- This fixes the "Database error querying schema" issue
+/*
+  # Create 10 Pre-configured Admin Accounts
 
--- Step 1: Delete existing problematic admin accounts
-DELETE FROM auth.identities WHERE provider = 'email' AND identity_data->>'email' LIKE 'admin%@example.com';
-DELETE FROM auth.users WHERE email LIKE 'admin%@example.com';
+  ## Overview
+  Creates 10 admin user accounts with standardized credentials for easy access.
+  These accounts are created in both auth.users and the admins table.
 
--- Step 2: Create 10 admin accounts with ALL required fields
+  ## Admin Accounts Created
+  
+  Email addresses: admin1@example.com through admin10@example.com
+  Password: Admin@123 (for all accounts)
+  Names: Admin 1 through Admin 10
+
+  ## Security Notes
+  
+  - All accounts use the same password for simplicity
+  - Password is securely hashed by Supabase Auth
+  - Admins should change their passwords after first login
+  - Each admin can only see their own boards due to RLS policies
+
+  ## Implementation
+  
+  Uses Supabase's auth.users table directly to create accounts.
+  Also creates corresponding entries in the admins table for profile data.
+*/
+
+-- Create 10 admin users with pre-configured credentials
+-- Password: Admin@123
+
 DO $$
 DECLARE
   admin_id uuid;
@@ -17,89 +38,45 @@ BEGIN
     admin_email := 'admin' || i || '@example.com';
     admin_name := 'Admin ' || i;
     
-    -- Generate a UUID for the new user
-    admin_id := gen_random_uuid();
+    -- Check if user already exists
+    SELECT id INTO admin_id FROM auth.users WHERE email = admin_email;
     
-    -- Create user in auth.users with ALL required fields
-    INSERT INTO auth.users (
-      id,
-      instance_id,
-      email,
-      encrypted_password,
-      email_confirmed_at,
-      created_at,
-      updated_at,
-      raw_app_meta_data,
-      raw_user_meta_data,
-      aud,
-      role,
-      confirmation_token,
-      recovery_token,
-      email_change_token_new,
-      email_change,
-      phone_confirmed_at,
-      phone_change_token,
-      phone_change,
-      confirmed_at,
-      last_sign_in_at,
-      is_super_admin
-    ) VALUES (
-      admin_id,
-      '00000000-0000-0000-0000-000000000000',
-      admin_email,
-      crypt('Admin@123', gen_salt('bf')),
-      now(),
-      now(),
-      now(),
-      '{"provider":"email","providers":["email"]}'::jsonb,
-      jsonb_build_object('name', admin_name),
-      'authenticated',
-      'authenticated',
-      '',
-      '',
-      '',
-      '',
-      now(),
-      '',
-      '',
-      now(),
-      now(),
-      false
-    );
-    
-    -- Create entry in auth.identities table
-    INSERT INTO auth.identities (
-      id,
-      user_id,
-      identity_data,
-      provider,
-      provider_id,
-      last_sign_in_at,
-      created_at,
-      updated_at
-    ) VALUES (
-      gen_random_uuid(),
-      admin_id,
-      format('{"sub":"%s","email":"%s"}', admin_id::text, admin_email)::jsonb,
-      'email',
-      admin_id::text,
-      now(),
-      now(),
-      now()
-    );
-    
-    -- Create admin profile
-    BEGIN
+    -- Only create if doesn't exist
+    IF admin_id IS NULL THEN
+      -- Generate a UUID for the new user
+      admin_id := gen_random_uuid();
+      
+      -- Insert into auth.users
+      INSERT INTO auth.users (
+        id,
+        instance_id,
+        email,
+        encrypted_password,
+        email_confirmed_at,
+        created_at,
+        updated_at,
+        raw_app_meta_data,
+        raw_user_meta_data,
+        aud,
+        role
+      ) VALUES (
+        admin_id,
+        '00000000-0000-0000-0000-000000000000',
+        admin_email,
+        crypt('Admin@123', gen_salt('bf')),
+        now(),
+        now(),
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        jsonb_build_object('name', admin_name),
+        'authenticated',
+        'authenticated'
+      );
+      
+      -- Insert into admins table
       INSERT INTO admins (id, email, name, created_at)
-      VALUES (admin_id, admin_email, admin_name, now());
-    EXCEPTION WHEN OTHERS THEN
-      NULL;
-    END;
-    
+      VALUES (admin_id, admin_email, admin_name, now())
+      ON CONFLICT (id) DO NOTHING;
+    END IF;
   END LOOP;
-  
-  RAISE NOTICE '✅ Created 10 admin accounts with all required fields!';
 END $$;
-
--- Verify accounts were created
-SELECT email, confirmed_at, created_at FROM auth.users WHERE email LIKE 'admin%@example.com' ORDER BY email;
