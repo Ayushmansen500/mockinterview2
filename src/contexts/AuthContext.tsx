@@ -26,70 +26,124 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Session error:', error);
+      }
       setUser(session?.user ?? null);
-      setLoading(false);
-
       if (session?.user) {
         loadAdminProfile(session.user.id);
+      } else {
+        setLoading(false);
       }
+    }).catch((err) => {
+      console.error('Failed to get session:', err);
+      setLoading(false);
     });
 
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-
       if (session?.user) {
         loadAdminProfile(session.user.id);
       } else {
         setAdmin(null);
+        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, []);
 
   const loadAdminProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('admins')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (data) {
-      setAdmin(data);
+      if (error) {
+        console.error('Error loading admin profile:', error);
+        // Don't throw - just proceed without admin profile
+        setAdmin(null);
+      } else if (data) {
+        setAdmin(data as Admin);
+      }
+    } catch (err) {
+      console.error('Failed to load admin profile:', err);
+      setAdmin(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Sign in error:', error);
+        throw new Error(error.message || 'Failed to sign in');
+      }
+    } catch (err) {
+      console.error('Sign in failed:', err);
+      throw err;
+    }
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    if (error) throw error;
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('admins')
-        .insert({
-          id: data.user.id,
-          email,
-          name,
-        });
-      if (profileError) throw profileError;
+      if (error) {
+        console.error('Sign up error:', error);
+        throw new Error(error.message || 'Failed to sign up');
+      }
+
+      if (data.user) {
+        // Try to create admin profile, but don't fail if it doesn't work
+        try {
+          const { error: profileError } = await supabase
+            .from('admins')
+            .insert({
+              id: data.user.id,
+              email,
+              name,
+            });
+
+          if (profileError) {
+            console.warn('Warning: Could not create admin profile:', profileError);
+            // Don't throw - user is created, just profile creation failed
+          }
+        } catch (profileErr) {
+          console.warn('Warning: Failed to create admin profile:', profileErr);
+        }
+      }
+    } catch (err) {
+      console.error('Sign up failed:', err);
+      throw err;
     }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Sign out error:', error);
+        throw new Error(error.message || 'Failed to sign out');
+      }
+    } catch (err) {
+      console.error('Sign out failed:', err);
+      throw err;
+    }
   };
 
   return (
