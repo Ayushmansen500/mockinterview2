@@ -1,11 +1,11 @@
--- Create 10 Admin Accounts with Email/Password Auth (FIXED VERSION)
--- Run this in Supabase SQL Editor
+-- COMPLETE FIX: Create admin accounts with ALL required fields
+-- This fixes the "Database error querying schema" issue
 
--- First, delete existing admin accounts if they exist
+-- Step 1: Delete existing problematic admin accounts
 DELETE FROM auth.identities WHERE provider = 'email' AND identity_data->>'email' LIKE 'admin%@example.com';
 DELETE FROM auth.users WHERE email LIKE 'admin%@example.com';
 
--- Now create 10 new admin accounts
+-- Step 2: Create 10 admin accounts with ALL required fields
 DO $$
 DECLARE
   admin_id uuid;
@@ -20,7 +20,7 @@ BEGIN
     -- Generate a UUID for the new user
     admin_id := gen_random_uuid();
     
-    -- Create user in auth.users
+    -- Create user in auth.users with ALL required fields
     INSERT INTO auth.users (
       id,
       instance_id,
@@ -32,7 +32,17 @@ BEGIN
       raw_app_meta_data,
       raw_user_meta_data,
       aud,
-      role
+      role,
+      confirmation_token,
+      recovery_token,
+      email_change_token_new,
+      email_change,
+      phone_confirmed_at,
+      phone_change_token,
+      phone_change,
+      confirmed_at,
+      last_sign_in_at,
+      is_super_admin
     ) VALUES (
       admin_id,
       '00000000-0000-0000-0000-000000000000',
@@ -44,7 +54,17 @@ BEGIN
       '{"provider":"email","providers":["email"]}'::jsonb,
       jsonb_build_object('name', admin_name),
       'authenticated',
-      'authenticated'
+      'authenticated',
+      '',
+      '',
+      '',
+      '',
+      now(),
+      '',
+      '',
+      now(),
+      now(),
+      false
     );
     
     -- Create entry in auth.identities table
@@ -68,19 +88,18 @@ BEGIN
       now()
     );
     
-    -- Create corresponding admin profile in admins table (if it exists)
+    -- Create admin profile
     BEGIN
       INSERT INTO admins (id, email, name, created_at)
       VALUES (admin_id, admin_email, admin_name, now());
     EXCEPTION WHEN OTHERS THEN
-      -- If admins table doesn't exist, just skip
       NULL;
     END;
     
   END LOOP;
   
-  RAISE NOTICE '✅ Created 10 admin accounts successfully!';
+  RAISE NOTICE '✅ Created 10 admin accounts with all required fields!';
 END $$;
 
 -- Verify accounts were created
-SELECT email, created_at FROM auth.users WHERE email LIKE 'admin%@example.com' ORDER BY email;
+SELECT email, confirmed_at, created_at FROM auth.users WHERE email LIKE 'admin%@example.com' ORDER BY email;
