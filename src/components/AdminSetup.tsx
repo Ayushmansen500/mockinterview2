@@ -167,7 +167,7 @@ export function AdminSetup() {
                 </p>
                 <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                   {results.filter(r => r.success).length} of {results.length} accounts created successfully.
-                  You can now use these credentials to login.
+                  You can use these credentials to login.
                 </p>
               </div>
 
