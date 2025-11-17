@@ -21,7 +21,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return user ? <>{children}</> : <Navigate to="/login" />;
+  return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function App() {
@@ -30,13 +30,28 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <Routes>
+            {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
-            <Route path="/setup" element={<AdminSetup />} />
+            <Route path="/admin-setup" element={<AdminSetup />} />
+            
+            {/* Public Leaderboard & Dashboard Routes */}
             <Route path="/public/:publicId" element={<PublicLeaderboard />} />
             <Route path="/activeness/:publicId" element={<PublicActivenessBoard />} />
             <Route path="/attend/:sessionCode" element={<PublicAttendance />} />
             <Route path="/attendance/:publicId" element={<PublicBatchAttendance />} />
+
+            {/* Protected Routes */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <AdminPanel />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Root Route - Redirects to Dashboard if logged in, Login if not */}
             <Route
               path="/"
               element={
@@ -45,6 +60,9 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* 404 - Not Found */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </AuthProvider>
       </ThemeProvider>
