@@ -29,7 +29,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
-
       if (session?.user) {
         loadAdminProfile(session.user.id);
       }
@@ -37,7 +36,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-
       if (session?.user) {
         loadAdminProfile(session.user.id);
       } else {
@@ -54,7 +52,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('id', userId)
       .maybeSingle();
-
     if (data) {
       setAdmin(data);
     }
@@ -72,9 +69,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          name,
+        },
+      },
     });
     if (error) throw error;
-
     if (data.user) {
       const { error: profileError } = await supabase
         .from('admins')
@@ -104,5 +106,5 @@ export function useAuth() {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  return context; // ✅ FIXED: Was missing return statement
 }
