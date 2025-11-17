@@ -163,7 +163,7 @@ export function AdminSetup() {
 
               <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                 <p className="text-sm text-green-900 dark:text-green-100 font-medium">
-                  ✅ Setup Complete!
+                  Setup Complete!
                 </p>
                 <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                   {results.filter(r => r.success).length} of {results.length} accounts created successfully.
