@@ -87,11 +87,6 @@ export function LoginPage() {
                   <p className="text-sm font-medium text-red-900 dark:text-red-100">
                     {error}
                   </p>
-                  {error.includes('Email not confirmed') && (
-                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                      Please check your email for a confirmation link
-                    </p>
-                  )}
                 </div>
               </div>
             )}
@@ -106,8 +101,8 @@ export function LoginPage() {
 
             <div className="text-center">
               <p className="text-slate-600 dark:text-slate-400">
-                First time? <Link to="/admin-setup" className="text-blue-600 hover:text-blue-700 font-medium">
-                  Create Admin Accounts
+                Don't have an account? <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-medium">
+                  Sign Up
                 </Link>
               </p>
             </div>
