@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { UserPlus, CheckCircle, AlertCircle } from 'lucide-react';
+import { UserPlus, CheckCircle, AlertCircle, Home } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export function AdminSetup() {
   const [creating, setCreating] = useState(false);
   const [results, setResults] = useState<Array<{ email: string; success: boolean; error?: string }>>([]);
   const [completed, setCompleted] = useState(false);
+  const navigate = useNavigate();
 
   const createAdminAccounts = async () => {
     setCreating(true);
@@ -67,16 +69,27 @@ export function AdminSetup() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-              <UserPlus className="w-8 h-8 text-white" />
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex-1">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
+                  <UserPlus className="w-8 h-8 text-white" />
+                </div>
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                  Admin Account Setup
+                </h1>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Create 10 pre-configured admin accounts
+                </p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-              Admin Account Setup
-            </h1>
-            <p className="text-slate-600 dark:text-slate-400">
-              Create 10 pre-configured admin accounts
-            </p>
+            <button
+              onClick={() => navigate('/login')}
+              className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="Go to Login"
+            >
+              <Home className="w-6 h-6 text-slate-600 dark:text-slate-400" />
+            </button>
           </div>
 
           {!completed ? (
@@ -150,20 +163,20 @@ export function AdminSetup() {
 
               <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                 <p className="text-sm text-green-900 dark:text-green-100 font-medium">
-                  Setup Complete!
+                  ✅ Setup Complete!
                 </p>
                 <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                   {results.filter(r => r.success).length} of {results.length} accounts created successfully.
-                  You can now close this page and use the login page.
+                  You can now use these credentials to login.
                 </p>
               </div>
 
-              <a
-                href="/login"
-                className="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-center"
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-center"
               >
                 Go to Login Page
-              </a>
+              </button>
             </div>
           )}
         </div>
