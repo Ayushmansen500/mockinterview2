@@ -4,7 +4,6 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { LoginPage } from './components/LoginPage';
 import { SignupPage } from './components/SignupPage';
 import { AdminPanel } from './components/AdminPanel';
-import { AdminSetup } from './components/AdminSetup';
 import { PublicLeaderboard } from './components/PublicLeaderboard';
 import { PublicActivenessBoard } from './components/PublicActivenessBoard';
 import { PublicAttendance } from './components/PublicAttendance';
@@ -33,7 +32,6 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
-            <Route path="/admin-setup" element={<AdminSetup />} />
             
             {/* Public Leaderboard & Dashboard Routes */}
             <Route path="/public/:publicId" element={<PublicLeaderboard />} />
@@ -51,7 +49,7 @@ function App() {
               }
             />
 
-            {/* Root Route - Redirects to Dashboard if logged in, Login if not */}
+            {/* Root Route */}
             <Route
               path="/"
               element={
