@@ -1,359 +1,136 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { InterviewScoreForm } from './InterviewRoundForm';
 import { LeaderboardTable } from './LeaderboardTable';
-import { StudentRoundsModal } from './StudentRoundsModal';
-import { InterviewRoundForm } from './InterviewRoundForm';
-import { LeaderboardSelector } from './LeaderboardSelector';
-import { LogOut, Plus, Download, Upload, Share2, Moon, Sun } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
-import { calculateBatchMetrics, getStudentMetricsArray } from '../lib/scoring';
-import type { Database } from '../lib/database.types';
-import type { StudentMetrics, BatchMetrics } from '../lib/scoring';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { Loader, AlertCircle } from 'lucide-react';
 
-type Leaderboard = Database['public']['Tables']['leaderboards']['Row'];
-type InterviewRound = Database['public']['Tables']['interview_rounds']['Row'];
+interface ScoreRecord {
+  id: string;
+  student_name: string;
+  interview_score: number;
+  round_number: number;
+  feedback: string | null;
+  created_at: string;
+}
 
 interface AdminDashboardProps {
   hideHeader?: boolean;
 }
 
 export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
-  const { admin, signOut } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
-  const [leaderboards, setLeaderboards] = useState<Leaderboard[]>([]);
-  const [selectedLeaderboard, setSelectedLeaderboard] = useState<Leaderboard | null>(null);
-  const [rounds, setRounds] = useState<InterviewRound[]>([]);
-  const [studentMetrics, setStudentMetrics] = useState<StudentMetrics[]>([]);
-  const [batchMetrics, setBatchMetrics] = useState<BatchMetrics>({
-    totalStudents: 0,
-    totalInterviews: 0,
-    averageScore: 0,
-    highestIndividualScore: 0,
-  });
-  const [selectedStudent, setSelectedStudent] = useState<StudentMetrics | null>(null);
-  const [showRoundForm, setShowRoundForm] = useState(false);
+  const { admin } = useAuth();
+  const [scores, setScores] = useState<ScoreRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadLeaderboards();
-  }, []);
+    fetchScores();
+  }, [admin?.id]);
 
-  useEffect(() => {
-    if (selectedLeaderboard) {
-      loadRounds(selectedLeaderboard.id);
-    }
-  }, [selectedLeaderboard]);
+  const fetchScores = async () => {
+    setLoading(true);
+    setError('');
 
-  useEffect(() => {
-    if (rounds.length > 0) {
-      const metrics = getStudentMetricsArray(rounds);
-      setStudentMetrics(metrics);
-      setBatchMetrics(calculateBatchMetrics(rounds));
-    } else {
-      setStudentMetrics([]);
-      setBatchMetrics({
-        totalStudents: 0,
-        totalInterviews: 0,
-        averageScore: 0,
-        highestIndividualScore: 0,
-      });
-    }
-  }, [rounds]);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('interview_leaderboard')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const loadLeaderboards = async () => {
-    setLoading(false);
+      if (fetchError) throw fetchError;
 
-    const { data } = await supabase
-      .from('leaderboards')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setLeaderboards(data);
-      if (data.length > 0 && !selectedLeaderboard) {
-        setSelectedLeaderboard(data[0]);
-      }
+      setScores(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error loading scores');
+      console.error('Error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadRounds = async (leaderboardId: string) => {
-    const { data } = await supabase
-      .from('interview_rounds')
-      .select('*')
-      .eq('leaderboard_id', leaderboardId)
-      .order('interview_date', { ascending: false });
-
-    if (data) {
-      setRounds(data);
-    }
-  };
-
-  const handleCreateLeaderboard = async (name: string, description: string) => {
-    if (!admin) return;
-
-    const { data } = await supabase
-      .from('leaderboards')
-      .insert({
-        name,
-        description,
-        created_by: admin.id,
-      })
-      .select()
-      .single();
-
-    if (data) {
-      setLeaderboards([data, ...leaderboards]);
-      setSelectedLeaderboard(data);
-    }
-  };
-
-  const handleDeleteLeaderboard = async (id: string) => {
-    if (!confirm('Delete this leaderboard? All interview data will be removed.')) return;
-
-    await supabase.from('leaderboards').delete().eq('id', id);
-    const newLeaderboards = leaderboards.filter(l => l.id !== id);
-    setLeaderboards(newLeaderboards);
-    setSelectedLeaderboard(newLeaderboards[0] || null);
-  };
-
-  const handleSaveRound = async (roundData: Omit<InterviewRound, 'id' | 'leaderboard_id' | 'created_at' | 'updated_at'>) => {
-    if (!selectedLeaderboard) return;
-
-    const { data, error } = await supabase
-      .from('interview_rounds')
-      .insert({
-        ...roundData,
-        leaderboard_id: selectedLeaderboard.id,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error saving interview round:', error);
-      alert(`Failed to save interview round: ${error.message}`);
-      return;
-    }
-
-    if (data) {
-      setRounds([...rounds, data]);
-      setShowRoundForm(false);
-    }
-  };
-
-  const handleDeleteRound = async (roundId: string) => {
-    await supabase.from('interview_rounds').delete().eq('id', roundId);
-    setRounds(rounds.filter(r => r.id !== roundId));
-  };
-
-  const handleExport = () => {
-    if (!selectedLeaderboard) return;
-
-    const dataStr = JSON.stringify({
-      leaderboard: selectedLeaderboard,
-      rounds: rounds,
-    }, null, 2);
-
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const fileName = `${selectedLeaderboard.name.replace(/\s+/g, '_')}_rounds.json`;
-
-    const link = document.createElement('a');
-    link.setAttribute('href', dataUri);
-    link.setAttribute('download', fileName);
-    link.click();
-  };
-
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !selectedLeaderboard) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const json = JSON.parse(e.target?.result as string);
-
-        if (json.rounds && Array.isArray(json.rounds)) {
-          for (const round of json.rounds) {
-            await supabase.from('interview_rounds').insert({
-              leaderboard_id: selectedLeaderboard.id,
-              student_name: round.student_name,
-              round_number: round.round_number || 1,
-              score: round.score || 5,
-              interview_date: round.interview_date,
-              interviewer_name: round.interviewer_name || '',
-              strengths: round.strengths || '',
-              weaknesses: round.weaknesses || '',
-              feedback: round.feedback || '',
-              notes: round.notes || '',
-            });
-          }
-
-          loadRounds(selectedLeaderboard.id);
-          alert('Import successful!');
-        }
-      } catch (error) {
-        alert('Failed to import file. Please check the format.');
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  };
-
-  const copyPublicLink = () => {
-    if (!selectedLeaderboard) return;
-    const url = `${window.location.origin}/public/${selectedLeaderboard.public_id}`;
-    navigator.clipboard.writeText(url);
-    alert('Public link copied!');
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-slate-600 dark:text-slate-400">Loading...</div>
-      </div>
-    );
-  }
-
-  const selectedStudentRounds = selectedStudent
-    ? rounds.filter(r => r.student_name === selectedStudent.name)
-    : [];
-
-  const content = (
-    <div>
+  return (
+    <div className="space-y-8">
       {!hideHeader && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
             Interview Leaderboard
-          </h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Manage student interview rounds and scores
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-2">
+            Manage and track student interview scores
           </p>
         </div>
       )}
-        <div className="mb-6">
-          <LeaderboardSelector
-            leaderboards={leaderboards}
-            selectedLeaderboard={selectedLeaderboard}
-            onSelect={setSelectedLeaderboard}
-            onCreate={handleCreateLeaderboard}
-            onDelete={handleDeleteLeaderboard}
-          />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1">
+          <InterviewScoreForm onScoreAdded={() => fetchScores()} />
         </div>
-
-        {selectedLeaderboard && (
-          <>
-            <div className="mb-6 flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowRoundForm(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                Record Interview
-              </button>
-              <button
-                onClick={copyPublicLink}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-              >
-                <Share2 className="w-5 h-5" />
-                Copy Public Link
-              </button>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
-              >
-                <Download className="w-5 h-5" />
-                Export
-              </button>
-              <label className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors cursor-pointer">
-                <Upload className="w-5 h-5" />
-                Import
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImport}
-                  className="hidden"
-                />
-              </label>
+        <div className="lg:col-span-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader className="w-6 h-6 animate-spin text-blue-600" />
             </div>
-
-            <AnalyticsDashboard metrics={batchMetrics} />
-
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-                Student Leaderboard
-              </h2>
-              <LeaderboardTable
-                students={studentMetrics}
-                onStudentClick={setSelectedStudent}
-              />
+          ) : error ? (
+            <div className="flex gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-900 dark:text-red-100">{error}</p>
             </div>
-          </>
-        )}
-
-        {showRoundForm && selectedLeaderboard && (
-          <InterviewRoundForm
-            leaderboardId={selectedLeaderboard.id}
-            onSave={handleSaveRound}
-            onClose={() => setShowRoundForm(false)}
-          />
-        )}
-
-        {selectedStudent && (
-          <StudentRoundsModal
-            student={selectedStudent}
-            rounds={selectedStudentRounds}
-            onClose={() => setSelectedStudent(null)}
-            onDeleteRound={handleDeleteRound}
-          />
-        )}
-      </div>
-  );
-
-  if (hideHeader) {
-    return content;
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Interview Leaderboard
-              </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Welcome, {admin?.name}
+          ) : scores.length === 0 ? (
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 text-center">
+              <p className="text-slate-600 dark:text-slate-400">
+                No interview scores yet. Add one using the form.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={toggleTheme}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                title={isDark ? 'Light mode' : 'Dark mode'}
-              >
-                {isDark ? (
-                  <Sun className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                ) : (
-                  <Moon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                )}
-              </button>
-              <button
-                onClick={() => signOut()}
-                className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                Sign Out
-              </button>
+          ) : (
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
+                Interview Scores
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Student</th>
+                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Score</th>
+                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Round</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Feedback</th>
+                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scores.map((record) => (
+                      <tr key={record.id} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">
+                          {record.student_name}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-3 py-1 rounded-full font-semibold text-xs ${
+                            record.interview_score >= 8 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                            record.interview_score >= 6 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
+                            'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                          }`}>
+                            {record.interview_score}/10
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-400">
+                          Round {record.round_number}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">
+                          {record.feedback || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-400 text-xs">
+                          {new Date(record.created_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {content}
-      </main>
+      </div>
     </div>
   );
 }
