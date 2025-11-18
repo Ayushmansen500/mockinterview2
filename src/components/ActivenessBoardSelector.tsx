@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Plus, Trash2, ChevronDown, AlertCircle } from 'lucide-react';
 
 interface ActivenessRecord {
   id: string;
   student_name: string;
   activeness_score: number;
   duration_minutes: number | null;
-  zoom_session_id: string | null;
   created_at: string;
 }
 
@@ -16,20 +15,19 @@ export function ActivenessBoardSelector() {
   const { admin } = useAuth();
   const [scores, setScores] = useState<ActivenessRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
-  const [formSuccess, setFormSuccess] = useState('');
-  const [formLoading, setFormLoading] = useState(false);
 
-  // Form state
-  const [studentName, setStudentName] = useState('');
-  const [activenessScore, setActivenessScore] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('');
-  const [zoomSessionId, setZoomSessionId] = useState('');
+  const [formData, setFormData] = useState({
+    student_name: '',
+    activeness_score: 50,
+    duration_minutes: '',
+  });
 
   useEffect(() => {
     fetchScores();
-  }, [admin?.id]);
+  }, []);
 
   const fetchScores = async () => {
     setLoading(true);
@@ -39,11 +37,9 @@ export function ActivenessBoardSelector() {
       const { data, error: fetchError } = await supabase
         .from('zoom_activeness_dashboard')
         .select('*')
-        .order('activeness_score', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('activeness_score', { ascending: false });
 
       if (fetchError) throw fetchError;
-
       setScores(data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error loading scores');
@@ -53,211 +49,204 @@ export function ActivenessBoardSelector() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAddScore = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    setFormSuccess('');
-    setFormLoading(true);
 
     try {
-      if (!studentName.trim()) {
+      if (!formData.student_name.trim()) {
         throw new Error('Student name is required');
       }
-      if (!activenessScore || parseFloat(activenessScore) < 0 || parseFloat(activenessScore) > 100) {
+      if (formData.activeness_score < 0 || formData.activeness_score > 100) {
         throw new Error('Score must be between 0 and 100');
       }
 
       const { error: insertError } = await supabase
         .from('zoom_activeness_dashboard')
         .insert({
-          student_name: studentName.trim(),
-          activeness_score: parseFloat(activenessScore),
-          duration_minutes: durationMinutes ? parseInt(durationMinutes) : null,
-          zoom_session_id: zoomSessionId.trim() || null,
+          student_name: formData.student_name.trim(),
+          activeness_score: formData.activeness_score,
+          duration_minutes: formData.duration_minutes ? parseInt(formData.duration_minutes) : null,
           admin_id: admin?.id,
         });
 
       if (insertError) throw insertError;
 
-      setFormSuccess(`Activeness score added for ${studentName}!`);
-      setStudentName('');
-      setActivenessScore('');
-      setDurationMinutes('');
-      setZoomSessionId('');
-      
+      setFormData({ student_name: '', activeness_score: 50, duration_minutes: '' });
+      setShowForm(false);
       fetchScores();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Error adding score');
-    } finally {
-      setFormLoading(false);
     }
   };
 
+  const handleDeleteScore = async (id: string) => {
+    if (!confirm('Delete this score?')) return;
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('zoom_activeness_dashboard')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+      fetchScores();
+    } catch (err) {
+      console.error('Error:', err);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-12 text-slate-600 dark:text-slate-400">Loading...</div>;
+  }
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          Zoom Activeness Board
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400 mt-2">
-          Track student activeness during Zoom sessions
-        </p>
-      </div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            Zoom Activeness Board
+          </h2>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            Add Score
+          </button>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-              Add Activeness Score
-            </h2>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
+        {showForm && (
+          <form onSubmit={handleAddScore} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4 mb-4">
+            <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Student Name *
                 </label>
                 <input
                   type="text"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  placeholder="Enter student name"
                   required
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  value={formData.student_name}
+                  onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Enter name"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Activeness Score (0-100) *
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={activenessScore}
-                  onChange={(e) => setActivenessScore(e.target.value)}
-                  placeholder="Enter score"
-                  required
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={formData.activeness_score}
+                    onChange={(e) => setFormData({ ...formData, activeness_score: parseInt(e.target.value) })}
+                    className="flex-1 h-2 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="w-12 text-center font-bold text-slate-900 dark:text-white">
+                    {formData.activeness_score}%
+                  </span>
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Duration (minutes)
                 </label>
                 <input
                   type="number"
                   min="0"
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(e.target.value)}
-                  placeholder="e.g., 60"
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Zoom Session ID (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={zoomSessionId}
-                  onChange={(e) => setZoomSessionId(e.target.value)}
-                  placeholder="e.g., 123456789"
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  value={formData.duration_minutes}
+                  onChange={(e) => setFormData({ ...formData, duration_minutes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Optional"
                 />
               </div>
 
               {formError && (
-                <div className="flex gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                   <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
                   <p className="text-sm text-red-900 dark:text-red-100">{formError}</p>
                 </div>
               )}
 
-              {formSuccess && (
-                <div className="flex gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                  <p className="text-sm text-green-900 dark:text-green-100">{formSuccess}</p>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={formLoading}
-                className="w-full flex items-center justify-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium rounded-lg transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                {formLoading ? 'Adding...' : 'Add Score'}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <div className="lg:col-span-2">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader className="w-6 h-6 animate-spin text-green-600" />
-            </div>
-          ) : error ? (
-            <div className="flex gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-              <p className="text-sm text-red-900 dark:text-red-100">{error}</p>
-            </div>
-          ) : scores.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 text-center">
-              <p className="text-slate-600 dark:text-slate-400">
-                No activeness scores yet. Add one using the form.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-                Activeness Scores
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Rank</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Student</th>
-                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Score</th>
-                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Duration</th>
-                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scores.map((record, idx) => (
-                      <tr key={record.id} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                        <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">#{idx + 1}</td>
-                        <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">
-                          {record.student_name}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-3 py-1 rounded-full font-semibold text-xs ${
-                            record.activeness_score >= 80 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
-                            record.activeness_score >= 60 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
-                            'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                          }`}>
-                            {record.activeness_score}%
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-400">
-                          {record.duration_minutes ? `${record.duration_minutes} min` : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-400 text-xs">
-                          {new Date(record.created_at).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  Save Score
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
-          )}
+          </form>
+        )}
+      </div>
+
+      {error && (
+        <div className="flex gap-2 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+          <p className="text-sm text-red-900 dark:text-red-100">{error}</p>
         </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        {scores.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-slate-600 dark:text-slate-400">No activeness scores yet.</p>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-slate-50 dark:bg-slate-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-white">Rank</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-white">Student</th>
+                <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Score</th>
+                <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Duration</th>
+                <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+              {scores.map((score, idx) => (
+                <tr key={score.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                  <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">#{idx + 1}</td>
+                  <td className="px-6 py-4 text-sm text-slate-900 dark:text-white font-medium">{score.student_name}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                      score.activeness_score >= 80 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                      score.activeness_score >= 60 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
+                      'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                    }`}>
+                      {score.activeness_score}%
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center text-sm text-slate-600 dark:text-slate-400">
+                    {score.duration_minutes ? `${score.duration_minutes}m` : '-'}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button
+                      onClick={() => handleDeleteScore(score.id)}
+                      className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
