@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Calendar, Plus, X, Trash2, Copy, Check } from 'lucide-react';
+import { Calendar, Plus, X, Copy, Check } from 'lucide-react';
 
 interface SessionRecord {
   id: string;
@@ -83,22 +83,6 @@ export function AttendanceBatchSelector() {
     }
   };
 
-  const handleDeleteSession = async (id: string) => {
-    if (!confirm('Delete this session?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('attendance_sessions')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      fetchSessions();
-    } catch (err) {
-      console.error('Error:', err);
-    }
-  };
-
   const copyToClipboard = (code: string, id: string) => {
     navigator.clipboard.writeText(code);
     setCopiedId(id);
@@ -164,25 +148,17 @@ export function AttendanceBatchSelector() {
                 {new Date(session.created_at).toLocaleString()}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => copyToClipboard(session.session_code, session.id)}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300 rounded-lg transition-colors font-mono font-semibold text-sm"
-              >
-                {session.session_code}
-                {copiedId === session.id ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </button>
-              <button
-                onClick={() => handleDeleteSession(session.id)}
-                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-              </button>
-            </div>
+            <button
+              onClick={() => copyToClipboard(session.session_code, session.id)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300 rounded-lg transition-colors font-mono font-semibold text-sm"
+            >
+              {session.session_code}
+              {copiedId === session.id ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
           </div>
         ))}
       </div>
