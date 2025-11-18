@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { LeaderboardTable } from './LeaderboardTable';
 import { StudentRoundsModal } from './StudentRoundsModal';
 import { InterviewRoundForm } from './InterviewRoundForm';
 import { LogOut, Plus, Download, Share2, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import type { StudentMetrics } from '../lib/scoring';
+import { calculateBatchMetrics, getStudentMetricsArray } from '../lib/scoring';
+import type { StudentMetrics, BatchMetrics } from '../lib/scoring';
 
 interface ScoreRecord {
   id: string;
@@ -26,22 +28,37 @@ export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
   const { isDark, toggleTheme } = useTheme();
   const [scores, setScores] = useState<ScoreRecord[]>([]);
   const [studentMetrics, setStudentMetrics] = useState<StudentMetrics[]>([]);
+  const [batchMetrics, setBatchMetrics] = useState<BatchMetrics>({
+    totalStudents: 0,
+    totalInterviews: 0,
+    averageScore: 0,
+    highestIndividualScore: 0,
+  });
   const [selectedStudent, setSelectedStudent] = useState<StudentMetrics | null>(null);
   const [showRoundForm, setShowRoundForm] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchScores();
+    loadScores();
   }, []);
 
   useEffect(() => {
     if (scores.length > 0) {
-      const metrics = calculateMetrics();
+      const metrics = getStudentMetricsArray(convertToRounds(scores));
       setStudentMetrics(metrics);
+      setBatchMetrics(calculateBatchMetrics(convertToRounds(scores)));
+    } else {
+      setStudentMetrics([]);
+      setBatchMetrics({
+        totalStudents: 0,
+        totalInterviews: 0,
+        averageScore: 0,
+        highestIndividualScore: 0,
+      });
     }
   }, [scores]);
 
-  const fetchScores = async () => {
+  const loadScores = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -52,29 +69,27 @@ export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
       if (error) throw error;
       setScores(data || []);
     } catch (err) {
-      console.error('Error fetching scores:', err);
+      console.error('Error loading scores:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateMetrics = (): StudentMetrics[] => {
-    const grouped: { [key: string]: ScoreRecord[] } = {};
-
-    scores.forEach(score => {
-      if (!grouped[score.student_name]) {
-        grouped[score.student_name] = [];
-      }
-      grouped[score.student_name].push(score);
-    });
-
-    return Object.entries(grouped).map(([name, rounds]) => ({
-      name,
-      highestScore: Math.max(...rounds.map(r => r.interview_score)),
-      totalScore: rounds.reduce((sum, r) => sum + r.interview_score, 0),
-      averageScore: rounds.reduce((sum, r) => sum + r.interview_score, 0) / rounds.length,
-      interviewsGiven: rounds.length,
-      lastInterviewDate: new Date(Math.max(...rounds.map(r => new Date(r.created_at).getTime()))).toISOString(),
+  const convertToRounds = (scores: ScoreRecord[]) => {
+    return scores.map(s => ({
+      id: s.id,
+      student_name: s.student_name,
+      round_number: s.round_number,
+      score: s.interview_score,
+      interview_date: s.created_at,
+      interviewer_name: '',
+      strengths: '',
+      weaknesses: '',
+      feedback: s.feedback || '',
+      notes: '',
+      leaderboard_id: '',
+      created_at: s.created_at,
+      updated_at: s.created_at,
     }));
   };
 
@@ -93,7 +108,7 @@ export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
       if (error) throw error;
 
       setShowRoundForm(false);
-      fetchScores();
+      loadScores();
     } catch (err) {
       console.error('Error saving round:', err);
       alert('Failed to save interview round');
@@ -108,7 +123,7 @@ export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
         .eq('id', roundId);
 
       if (error) throw error;
-      fetchScores();
+      loadScores();
     } catch (err) {
       console.error('Error deleting round:', err);
     }
@@ -154,29 +169,33 @@ export function AdminDashboard({ hideHeader = false }: AdminDashboardProps) {
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap gap-3">
-        <button
-          onClick={() => setShowRoundForm(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Record Interview
-        </button>
-        <button
-          onClick={copyPublicLink}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-        >
-          <Share2 className="w-5 h-5" />
-          Copy Public Link
-        </button>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
-        >
-          <Download className="w-5 h-5" />
-          Export
-        </button>
-      </div>
+      {!hideHeader && (
+        <div className="mb-6 flex flex-wrap gap-3">
+          <button
+            onClick={() => setShowRoundForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            Record Interview
+          </button>
+          <button
+            onClick={copyPublicLink}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            <Share2 className="w-5 h-5" />
+            Copy Public Link
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            Export
+          </button>
+        </div>
+      )}
+
+      <AnalyticsDashboard metrics={batchMetrics} />
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
