@@ -23,17 +23,29 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [admin, setAdmin] = useState<Admin | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // ✅ Start as loading
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-      if (session?.user) {
-        loadAdminProfile(session.user.id);
+    // Check if user is already logged in (on page load/refresh)
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          loadAdminProfile(session.user.id);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        setUser(null);
+      } finally {
+        setLoading(false); // ✅ Always set loading to false
       }
-    });
+    };
 
+    checkAuth();
+
+    // Listen for auth changes (login/logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -47,13 +59,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadAdminProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('admins')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-    if (data) {
-      setAdmin(data);
+    try {
+      const { data } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      if (data) {
+        setAdmin(data);
+      }
+    } catch (error) {
+      console.error('Profile load error:', error);
     }
   };
 
@@ -70,13 +86,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           name,
         },
       },
     });
+    
     if (error) throw error;
+    
     if (data.user) {
       const { error: profileError } = await supabase
         .from('admins')
@@ -85,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email,
           name,
         });
+      
       if (profileError) throw profileError;
     }
   };
@@ -92,6 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    setAdmin(null);
+    setUser(null);
   };
 
   return (
@@ -106,5 +126,5 @@ export function useAuth() {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context; // ✅ FIXED: Was missing return statement
+  return context;
 }
