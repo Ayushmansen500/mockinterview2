@@ -23,29 +23,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [admin, setAdmin] = useState<Admin | null>(null);
-  const [loading, setLoading] = useState(true); // ✅ Start as loading
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in (on page load/refresh)
+    // Check session on mount
     const checkAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          loadAdminProfile(session.user.id);
+          await loadAdminProfile(session.user.id);
         }
       } catch (error) {
-        console.error('Auth check error:', error);
-        setUser(null);
+        console.error('Auth error:', error);
       } finally {
-        setLoading(false); // ✅ Always set loading to false
+        setLoading(false);
       }
     };
 
     checkAuth();
 
-    // Listen for auth changes (login/logout)
+    // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -69,15 +68,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAdmin(data);
       }
     } catch (error) {
-      console.error('Profile load error:', error);
+      console.error('Profile error:', error);
     }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
@@ -85,11 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          name,
-        },
-      },
+      options: { data: { name } },
     });
     
     if (error) throw error;
@@ -97,11 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.user) {
       const { error: profileError } = await supabase
         .from('admins')
-        .insert({
-          id: data.user.id,
-          email,
-          name,
-        });
+        .insert({ id: data.user.id, email, name });
       
       if (profileError) throw profileError;
     }
