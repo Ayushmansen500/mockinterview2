@@ -1,213 +1,157 @@
 import { useState } from 'react';
-import { X, Save } from 'lucide-react';
-import type { Database } from '../lib/database.types';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { Plus, AlertCircle, CheckCircle } from 'lucide-react';
 
-type InterviewRound = Database['public']['Tables']['interview_rounds']['Row'];
-
-interface InterviewRoundFormProps {
-  leaderboardId: string;
-  onSave: (round: Omit<InterviewRound, 'id' | 'leaderboard_id' | 'created_at' | 'updated_at'>) => void;
-  onClose: () => void;
+interface InterviewScoreFormProps {
+  onScoreAdded?: () => void;
 }
 
-export function InterviewRoundForm({ leaderboardId, onSave, onClose }: InterviewRoundFormProps) {
-  const [formData, setFormData] = useState({
-    student_name: '',
-    round_number: 1,
-    score: 5,
-    interview_date: new Date().toISOString().split('T')[0],
-    interviewer_name: '',
-    strengths: '',
-    weaknesses: '',
-    feedback: '',
-    notes: '',
-  });
+export function InterviewScoreForm({ onScoreAdded }: InterviewScoreFormProps) {
+  const { admin } = useAuth();
+  const [studentName, setStudentName] = useState('');
+  const [score, setScore] = useState('');
+  const [round, setRound] = useState('1');
+  const [feedback, setFeedback] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.student_name.trim() || !formData.interviewer_name.trim()) {
-      alert('Please fill in all required fields');
-      return;
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      if (!studentName.trim()) {
+        throw new Error('Student name is required');
+      }
+      if (!score || parseFloat(score) < 0 || parseFloat(score) > 10) {
+        throw new Error('Score must be between 0 and 10');
+      }
+
+      const { error: insertError } = await supabase
+        .from('interview_leaderboard')
+        .insert({
+          student_name: studentName.trim(),
+          interview_score: parseFloat(score),
+          round_number: parseInt(round),
+          feedback: feedback.trim() || null,
+          admin_id: admin?.id,
+        });
+
+      if (insertError) throw insertError;
+
+      setSuccess(`Score added for ${studentName}!`);
+      setStudentName('');
+      setScore('');
+      setRound('1');
+      setFeedback('');
+      
+      // Call callback to refresh data
+      onScoreAdded?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error adding score');
+      console.error('Error:', err);
+    } finally {
+      setLoading(false);
     }
-
-    onSave(formData);
-  };
-
-  const updateField = (field: string, value: string | number) => {
-    setFormData({ ...formData, [field]: value });
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Record Interview Round
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-          >
-            <X className="w-6 h-6 text-slate-500" />
-          </button>
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
+        Add Interview Score
+      </h2>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Student Name *
+            </label>
+            <input
+              type="text"
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              placeholder="Enter student name"
+              required
+              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Score (0-10) *
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              step="0.5"
+              value={score}
+              onChange={(e) => setScore(e.target.value)}
+              placeholder="Enter score"
+              required
+              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Round Number
+            </label>
+            <select
+              value={round}
+              onChange={(e) => setRound(e.target.value)}
+              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="1">Round 1</option>
+              <option value="2">Round 2</option>
+              <option value="3">Round 3</option>
+              <option value="4">Round 4</option>
+              <option value="5">Round 5</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Feedback (Optional)
+            </label>
+            <textarea
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Add feedback..."
+              rows={2}
+              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Student Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.student_name}
-                onChange={(e) => updateField('student_name', e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="John Doe"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Round Number *
-              </label>
-              <select
-                value={formData.round_number}
-                onChange={(e) => updateField('round_number', parseInt(e.target.value))}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {[1, 2, 3, 4, 5].map(n => (
-                  <option key={n} value={n}>Round {n}</option>
-                ))}
-              </select>
-            </div>
+        {error && (
+          <div className="flex gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+            <p className="text-sm text-red-900 dark:text-red-100">{error}</p>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Score (0-10) *
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min="0"
-                  max="10"
-                  step="1"
-                  value={formData.score}
-                  onChange={(e) => updateField('score', parseInt(e.target.value))}
-                  className="flex-1 h-2 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer"
-                />
-                <span className="text-lg font-bold text-slate-900 dark:text-white w-12 text-center">
-                  {formData.score}
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Interview Date *
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.interview_date}
-                onChange={(e) => updateField('interview_date', e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Interviewer Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.interviewer_name}
-                onChange={(e) => updateField('interviewer_name', e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Jane Smith"
-              />
-            </div>
+        {success && (
+          <div className="flex gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+            <p className="text-sm text-green-900 dark:text-green-100">{success}</p>
           </div>
+        )}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Feedback
-            </label>
-            <textarea
-              rows={3}
-              value={formData.feedback}
-              onChange={(e) => updateField('feedback', e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              placeholder="Overall feedback for this round..."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Strengths
-              </label>
-              <textarea
-                rows={2}
-                value={formData.strengths}
-                onChange={(e) => updateField('strengths', e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                placeholder="What did the student do well?"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Areas for Improvement
-              </label>
-              <textarea
-                rows={2}
-                value={formData.weaknesses}
-                onChange={(e) => updateField('weaknesses', e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                placeholder="What could be improved?"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Additional Notes
-            </label>
-            <textarea
-              rows={2}
-              value={formData.notes}
-              onChange={(e) => updateField('notes', e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              placeholder="Any other comments..."
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-            >
-              <Save className="w-5 h-5" />
-              Record Interview
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-3 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          {loading ? 'Adding...' : 'Add Score'}
+        </button>
+      </form>
     </div>
   );
 }
