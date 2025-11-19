@@ -1,21 +1,22 @@
 import { useState } from 'react';
 import { X, Save } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import type { Database } from '../lib/database.types';
+
+type InterviewRound = Database['public']['Tables']['interview_rounds']['Row'];
 
 interface InterviewRoundFormProps {
   leaderboardId: string;
-  onSave: (round: any) => void;
+  onSave: (round: Omit<InterviewRound, 'id' | 'leaderboard_id' | 'created_at' | 'updated_at'>) => void;
   onClose: () => void;
 }
 
-export function InterviewRoundForm({ onSave, onClose }: InterviewRoundFormProps) {
-  const { admin } = useAuth();
+export function InterviewRoundForm({ leaderboardId, onSave, onClose }: InterviewRoundFormProps) {
   const [formData, setFormData] = useState({
     student_name: '',
     round_number: 1,
     score: 5,
     interview_date: new Date().toISOString().split('T')[0],
-    interviewer_name: admin?.name || '',
+    interviewer_name: '',
     strengths: '',
     weaknesses: '',
     feedback: '',
