@@ -1,134 +1,170 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Plus, Trash2, ChevronDown, AlertCircle } from 'lucide-react';
+import { ActivenessBoardManager } from './ActivenessBoardManager';
+import { Plus, Trash2, ChevronDown } from 'lucide-react';
+import type { Database } from '../lib/database.types';
 
-interface ActivenessScore {
-  id: string;
-  student_name: string;
-  activeness_score: number;
-  duration_minutes: number | null;
-  created_at: string;
-}
+type ActivenessBoard = Database['public']['Tables']['activeness_boards']['Row'];
 
 export function ActivenessBoardSelector() {
   const { admin } = useAuth();
-  const [scores, setScores] = useState<ActivenessScore[]>([]);
+  const [boards, setBoards] = useState<ActivenessBoard[]>([]);
+  const [selectedBoard, setSelectedBoard] = useState<ActivenessBoard | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newBoardName, setNewBoardName] = useState('');
+  const [newBoardDescription, setNewBoardDescription] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadScores();
+    loadBoards();
   }, []);
 
-  const loadScores = async () => {
-    setLoading(true);
-    setError('');
+  const loadBoards = async () => {
+    setLoading(false);
 
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('zoom_activeness_dashboard')
-        .select('*')
-        .order('activeness_score', { ascending: false });
+    const { data } = await supabase
+      .from('activeness_boards')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (fetchError) throw fetchError;
-      setScores(data || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error loading scores');
-      console.error('Error:', err);
-    } finally {
-      setLoading(false);
+    if (data) {
+      setBoards(data);
+      if (data.length > 0 && !selectedBoard) {
+        setSelectedBoard(data[0]);
+      }
     }
   };
 
-  const handleDeleteScore = async (id: string) => {
-    if (!confirm('Delete this score?')) return;
+  const handleCreateBoard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!admin || !newBoardName.trim()) return;
 
-    try {
-      const { error: deleteError } = await supabase
-        .from('zoom_activeness_dashboard')
-        .delete()
-        .eq('id', id);
+    const { data } = await supabase
+      .from('activeness_boards')
+      .insert({
+        name: newBoardName,
+        description: newBoardDescription,
+        created_by: admin.id,
+      })
+      .select()
+      .single();
 
-      if (deleteError) throw deleteError;
-      loadScores();
-    } catch (err) {
-      console.error('Error:', err);
+    if (data) {
+      setBoards([data, ...boards]);
+      setSelectedBoard(data);
+      setShowCreateForm(false);
+      setNewBoardName('');
+      setNewBoardDescription('');
     }
   };
 
-  if (loading) {
-    return <div className="text-center py-12 text-slate-600 dark:text-slate-400">Loading...</div>;
-  }
+  const handleDeleteBoard = async (id: string) => {
+    if (!confirm('Delete this activeness board? All module scores will be removed.')) return;
+
+    await supabase.from('activeness_boards').delete().eq('id', id);
+    const newBoards = boards.filter(b => b.id !== id);
+    setBoards(newBoards);
+    setSelectedBoard(newBoards[0] || null);
+  };
 
   return (
     <div>
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            Zoom Activeness Board
+            Select Activeness Board
           </h2>
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            New Board
+          </button>
         </div>
 
-        {error && (
-          <div className="flex gap-2 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-4">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-            <p className="text-sm text-red-900 dark:text-red-100">{error}</p>
+        {showCreateForm && (
+          <form onSubmit={handleCreateBoard} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4 mb-4">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Board Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBoardName}
+                  onChange={(e) => setNewBoardName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="e.g., Batch 2025 - Zoom Activeness"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={newBoardDescription}
+                  onChange={(e) => setNewBoardDescription(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Optional description"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                >
+                  Create Board
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(false)}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {boards.length > 0 && (
+          <div className="relative">
+            <select
+              value={selectedBoard?.id || ''}
+              onChange={(e) => setSelectedBoard(boards.find(b => b.id === e.target.value) || null)}
+              className="w-full px-4 py-3 pr-10 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none"
+            >
+              {boards.map(board => (
+                <option key={board.id} value={board.id}>
+                  {board.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
           </div>
         )}
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-          {scores.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-slate-600 dark:text-slate-400">No activeness scores yet.</p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-slate-50 dark:bg-slate-700">
-                <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-white">Rank</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-white">Student</th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Score</th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Duration</th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Date</th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-slate-900 dark:text-white">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {scores.map((score, idx) => (
-                  <tr key={score.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">#{idx + 1}</td>
-                    <td className="px-6 py-4 text-sm text-slate-900 dark:text-white font-medium">{score.student_name}</td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                        score.activeness_score >= 80 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
-                        score.activeness_score >= 60 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
-                        'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                      }`}>
-                        {score.activeness_score}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center text-sm text-slate-600 dark:text-slate-400">
-                      {score.duration_minutes ? `${score.duration_minutes}m` : '-'}
-                    </td>
-                    <td className="px-6 py-4 text-center text-sm text-slate-600 dark:text-slate-400">
-                      {new Date(score.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => handleDeleteScore(score.id)}
-                        className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        {selectedBoard && (
+          <div className="mt-3 flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700 rounded-lg">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              {selectedBoard.description || 'No description'}
+            </p>
+            <button
+              onClick={() => handleDeleteBoard(selectedBoard.id)}
+              className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              title="Delete board"
+            >
+              <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+            </button>
+          </div>
+        )}
       </div>
+
+      <ActivenessBoardManager selectedBoard={selectedBoard} />
     </div>
   );
 }
