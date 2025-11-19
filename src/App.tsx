@@ -4,6 +4,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { LoginPage } from './components/LoginPage';
 import { SignupPage } from './components/SignupPage';
 import { AdminPanel } from './components/AdminPanel';
+import { AdminSetup } from './components/AdminSetup';
 import { PublicLeaderboard } from './components/PublicLeaderboard';
 import { PublicActivenessBoard } from './components/PublicActivenessBoard';
 import { PublicAttendance } from './components/PublicAttendance';
@@ -20,7 +21,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+  return user ? <>{children}</> : <Navigate to="/login" />;
 }
 
 function App() {
@@ -29,27 +30,13 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <Routes>
-            {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
-            
-            {/* Public Leaderboard & Dashboard Routes */}
+            <Route path="/setup" element={<AdminSetup />} />
             <Route path="/public/:publicId" element={<PublicLeaderboard />} />
             <Route path="/activeness/:publicId" element={<PublicActivenessBoard />} />
             <Route path="/attend/:sessionCode" element={<PublicAttendance />} />
             <Route path="/attendance/:publicId" element={<PublicBatchAttendance />} />
-
-            {/* Protected Routes */}
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <AdminPanel />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Root Route */}
             <Route
               path="/"
               element={
@@ -58,9 +45,6 @@ function App() {
                 </ProtectedRoute>
               }
             />
-
-            {/* 404 - Not Found */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </AuthProvider>
       </ThemeProvider>
